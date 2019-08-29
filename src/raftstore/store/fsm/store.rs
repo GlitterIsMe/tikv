@@ -54,6 +54,7 @@ use crate::raftstore::store::{
 };
 use crate::raftstore::Result;
 use crate::storage::kv::PerfStatisticsInstant;
+use crate::storage::kv::persist_perf_data;
 use crate::storage::kv::{CompactedEvent, CompactionListener};
 use engine::rocks::{set_perf_level, PerfLevel};
 use engine::Engines;
@@ -493,7 +494,7 @@ impl<T: Transport, C: PdClient> RaftPoller<T, C> {
                 });
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            self.poll_ctx.raft_metrics.rocksdb_perf.observe("kv", delta);
+            persist_perf_data(&mut ROCKSDB_WRITE_PERF_HISTOGRAM.local(), "kv", delta);
 
             let data_size = self.poll_ctx.kv_wb.data_size();
             if data_size > KV_WB_SHRINK_SIZE {
@@ -517,7 +518,7 @@ impl<T: Transport, C: PdClient> RaftPoller<T, C> {
                 });
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            self.poll_ctx.raft_metrics.rocksdb_perf.observe("kv", delta);
+            persist_perf_data(&mut ROCKSDB_WRITE_PERF_HISTOGRAM.local(), "kv", delta);
             let data_size = self.poll_ctx.raft_wb.data_size();
             if data_size > RAFT_WB_SHRINK_SIZE {
                 self.poll_ctx.raft_wb = WriteBatch::with_capacity(4 * 1024);

@@ -9,7 +9,7 @@ use kvproto::kvrpcpb::{CommandPri, Context, LockInfo};
 
 use crate::storage::kv::with_tls_engine;
 use crate::storage::kv::{CbContext, Modify, Result as EngineResult};
-use crate::storage::kv::{PerfStatisticsDelta, PerfStatisticsInstant};
+use crate::storage::kv::{PerfStatisticsInstant, persist_perf_data};
 use crate::storage::lock_manager::{
     self, wait_table_is_empty, DetectorScheduler, WaiterMgrScheduler,
 };
@@ -352,150 +352,6 @@ impl<E: Engine, S: MsgScheduler> Executor<E, S> {
     }
 }
 
-fn persist_perf_data(db: &'static str, delta: PerfStatisticsDelta) {
-    let mut write_perf = ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local();
-    write_perf
-        .with_label_values(&[db, "user_key_comparison_count"])
-        .observe(delta.user_key_comparison_count as f64);
-    write_perf
-        .with_label_values(&[db, "block_cache_hit_count"])
-        .observe(delta.block_cache_hit_count as f64);
-    write_perf
-        .with_label_values(&[db, "block_read_count"])
-        .observe(delta.block_read_count as f64);
-    write_perf
-        .with_label_values(&[db, "block_read_byte"])
-        .observe(delta.block_read_byte as f64);
-    write_perf
-        .with_label_values(&[db, "block_read_time"])
-        .observe(delta.block_read_time as f64);
-    write_perf
-        .with_label_values(&[db, "block_checksum_time"])
-        .observe(delta.block_checksum_time as f64);
-    write_perf
-        .with_label_values(&[db, "block_decompress_time"])
-        .observe(delta.block_decompress_time as f64);
-    write_perf
-        .with_label_values(&[db, "get_read_bytes"])
-        .observe(delta.get_read_bytes as f64);
-    write_perf
-        .with_label_values(&[db, "multiget_read_bytes"])
-        .observe(delta.multiget_read_bytes as f64);
-    write_perf
-        .with_label_values(&[db, "iter_read_bytes"])
-        .observe(delta.iter_read_bytes as f64);
-    write_perf
-        .with_label_values(&[db, "internal_key_skipped_count"])
-        .observe(delta.internal_key_skipped_count as f64);
-    write_perf
-        .with_label_values(&[db, "internal_delete_skipped_count"])
-        .observe(delta.internal_delete_skipped_count as f64);
-    write_perf
-        .with_label_values(&[db, "internal_recent_skipped_count"])
-        .observe(delta.internal_recent_skipped_count as f64);
-    write_perf
-        .with_label_values(&[db, "internal_merge_count"])
-        .observe(delta.internal_merge_count as f64);
-    write_perf
-        .with_label_values(&[db, "get_snapshot_time"])
-        .observe(delta.get_snapshot_time as f64);
-    write_perf
-        .with_label_values(&[db, "get_from_memtable_time"])
-        .observe(delta.get_from_memtable_time as f64);
-    write_perf
-        .with_label_values(&[db, "get_from_memtable_count"])
-        .observe(delta.get_from_memtable_count as f64);
-    write_perf
-        .with_label_values(&[db, "get_post_process_time"])
-        .observe(delta.get_post_process_time as f64);
-    write_perf
-        .with_label_values(&[db, "get_from_output_files_time"])
-        .observe(delta.get_from_output_files_time as f64);
-    write_perf
-        .with_label_values(&[db, "seek_on_memtable_time"])
-        .observe(delta.seek_on_memtable_time as f64);
-    write_perf
-        .with_label_values(&[db, "seek_on_memtable_count"])
-        .observe(delta.seek_on_memtable_count as f64);
-    write_perf
-        .with_label_values(&[db, "next_on_memtable_count"])
-        .observe(delta.next_on_memtable_count as f64);
-    write_perf
-        .with_label_values(&[db, "prev_on_memtable_count"])
-        .observe(delta.prev_on_memtable_count as f64);
-    write_perf
-        .with_label_values(&[db, "seek_child_seek_time"])
-        .observe(delta.seek_child_seek_time as f64);
-    write_perf
-        .with_label_values(&[db, "seek_child_seek_count"])
-        .observe(delta.seek_child_seek_count as f64);
-    write_perf
-        .with_label_values(&[db, "seek_min_heap_time"])
-        .observe(delta.seek_min_heap_time as f64);
-    write_perf
-        .with_label_values(&[db, "seek_max_heap_time"])
-        .observe(delta.seek_max_heap_time as f64);
-    write_perf
-        .with_label_values(&[db, "seek_internal_seek_time"])
-        .observe(delta.seek_internal_seek_time as f64);
-    write_perf
-        .with_label_values(&[db, "find_next_user_entry_time"])
-        .observe(delta.find_next_user_entry_time as f64);
-    write_perf
-        .with_label_values(&[db, "write_wal_time"])
-        .observe(delta.write_wal_time as f64);
-    write_perf
-        .with_label_values(&[db, "write_memtable_time"])
-        .observe(delta.write_memtable_time as f64);
-    write_perf
-        .with_label_values(&[db, "write_delay_time"])
-        .observe(delta.write_delay_time as f64);
-    // write_perf.with_label_values(&[db, "write_scheduling_flushes_compactions_time"]).observe(delta.write_scheduling_flushes_compactions_time as f64);
-    write_perf
-        .with_label_values(&[db, "write_pre_and_post_process_time"])
-        .observe(delta.write_pre_and_post_process_time as f64);
-    // write_perf.with_label_values(&[db, "write_thread_wait_nanos"]).observe(delta.write_thread_wait_nanos as f64);
-    write_perf
-        .with_label_values(&[db, "db_mutex_lock_nanos"])
-        .observe(delta.db_mutex_lock_nanos as f64);
-    write_perf
-        .with_label_values(&[db, "db_condition_wait_nanos"])
-        .observe(delta.db_condition_wait_nanos as f64);
-    write_perf
-        .with_label_values(&[db, "merge_operator_time_nanos"])
-        .observe(delta.merge_operator_time_nanos as f64);
-    write_perf
-        .with_label_values(&[db, "read_index_block_nanos"])
-        .observe(delta.read_index_block_nanos as f64);
-    write_perf
-        .with_label_values(&[db, "read_filter_block_nanos"])
-        .observe(delta.read_filter_block_nanos as f64);
-    write_perf
-        .with_label_values(&[db, "new_table_block_iter_nanos"])
-        .observe(delta.new_table_block_iter_nanos as f64);
-    write_perf
-        .with_label_values(&[db, "new_table_iterator_nanos"])
-        .observe(delta.new_table_iterator_nanos as f64);
-    write_perf
-        .with_label_values(&[db, "block_seek_nanos"])
-        .observe(delta.block_seek_nanos as f64);
-    write_perf
-        .with_label_values(&[db, "find_table_nanos"])
-        .observe(delta.find_table_nanos as f64);
-    write_perf
-        .with_label_values(&[db, "bloom_memtable_hit_count"])
-        .observe(delta.bloom_memtable_hit_count as f64);
-    write_perf
-        .with_label_values(&[db, "bloom_memtable_miss_count"])
-        .observe(delta.bloom_memtable_miss_count as f64);
-    write_perf
-        .with_label_values(&[db, "bloom_sst_hit_count"])
-        .observe(delta.bloom_sst_hit_count as f64);
-    write_perf
-        .with_label_values(&[db, "bloom_sst_miss_count"])
-        .observe(delta.bloom_sst_miss_count as f64);
-}
-
 fn process_read_impl<E: Engine>(
     mut cmd: Command,
     snapshot: E::Snap,
@@ -517,7 +373,7 @@ fn process_read_impl<E: Engine>(
             let result = find_mvcc_infos_by_key(&mut reader, key, u64::MAX);
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            persist_perf_data("kv", delta);
+            persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
             statistics.add(reader.get_statistics());
             let (lock, writes, values) = result?;
             Ok(ProcessResult::MvccKey {
@@ -544,7 +400,7 @@ fn process_read_impl<E: Engine>(
                     let result = find_mvcc_infos_by_key(&mut reader, &key, u64::MAX);
                     set_perf_level(PerfLevel::EnableCount);
                     let delta = perf_stats.delta();
-                    persist_perf_data("kv", delta);
+                    persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
                     statistics.add(reader.get_statistics());
                     let (lock, writes, values) = result?;
                     Ok(ProcessResult::MvccStartTs {
@@ -582,7 +438,7 @@ fn process_read_impl<E: Engine>(
             let result = reader.scan_locks(start_key.as_ref(), |lock| lock.ts <= max_ts, limit);
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            persist_perf_data("kv", delta);
+            persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
             statistics.add(reader.get_statistics());
             let (kv_pairs, _) = result?;
             let mut locks = Vec::with_capacity(kv_pairs.len());
@@ -621,7 +477,7 @@ fn process_read_impl<E: Engine>(
             );
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            persist_perf_data("kv", delta);
+            persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
             statistics.add(reader.get_statistics());
             let (kv_pairs, has_remain) = result?;
             tls_collect_keyread_histogram_vec(tag, kv_pairs.len() as f64);
@@ -751,7 +607,7 @@ fn process_write_impl<S: Snapshot>(
             }
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            persist_perf_data("kv", delta);
+            persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
             statistics.add(&txn.take_statistics());
             if locks.is_empty() {
                 let pr = ProcessResult::MultiRes { results: vec![] };
@@ -788,7 +644,7 @@ fn process_write_impl<S: Snapshot>(
             }
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            persist_perf_data("kv", delta);
+            persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
 
             statistics.add(&txn.take_statistics());
             // no conflict
@@ -833,7 +689,7 @@ fn process_write_impl<S: Snapshot>(
             statistics.add(&txn.take_statistics());
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            persist_perf_data("kv", delta);
+            persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
             (ProcessResult::Res, txn.into_modifies(), rows, ctx, None)
         }
         Command::Cleanup {
@@ -851,7 +707,7 @@ fn process_write_impl<S: Snapshot>(
             notify_deadlock_detector_if_needed(&detector_scheduler, is_pessimistic_txn, start_ts);
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            persist_perf_data("kv", delta);
+            persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
             statistics.add(&txn.take_statistics());
             (ProcessResult::Res, txn.into_modifies(), 1, ctx, None)
         }
@@ -876,7 +732,7 @@ fn process_write_impl<S: Snapshot>(
             notify_deadlock_detector_if_needed(&detector_scheduler, is_pessimistic_txn, start_ts);
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            persist_perf_data("kv", delta);
+            persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
             statistics.add(&txn.take_statistics());
             (ProcessResult::Res, txn.into_modifies(), rows, ctx, None)
         }
@@ -901,7 +757,7 @@ fn process_write_impl<S: Snapshot>(
             notify_deadlock_detector_if_needed(&detector_scheduler, true, start_ts);
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            persist_perf_data("kv", delta);
+            persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
             statistics.add(&txn.take_statistics());
             (
                 ProcessResult::MultiRes { results: vec![] },
@@ -973,7 +829,7 @@ fn process_write_impl<S: Snapshot>(
                 write_size += txn.write_size();
                 set_perf_level(PerfLevel::EnableCount);
                 let delta = perf_stats.delta();
-                persist_perf_data("kv", delta);
+                persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
 
                 statistics.add(&txn.take_statistics());
                 modifies.append(&mut txn.into_modifies());
@@ -1038,7 +894,7 @@ fn process_write_impl<S: Snapshot>(
             notify_deadlock_detector_if_needed(&detector_scheduler, is_pessimistic_txn, start_ts);
             set_perf_level(PerfLevel::EnableCount);
             let delta = perf_stats.delta();
-            persist_perf_data("kv", delta);
+            persist_perf_data(&mut ROCKSDB_PERF_CONTEXT_HISTOGRAM_VEC.local(), "kv", delta);
             statistics.add(&txn.take_statistics());
             (ProcessResult::Res, txn.into_modifies(), rows, ctx, None)
         }
